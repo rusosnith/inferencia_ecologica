@@ -1,0 +1,14 @@
+{
+  "name": "d5f99de524dd743a",
+  "main": "d5f99de524dd743a@551.js",
+  "version": "551.0.0",
+  "homepage": "https://observablehq.com/d/d5f99de524dd743a",
+  "author": {
+    "name": "Andres Snitcofsky",
+    "url": "https://observablehq.com/@rusosnith"
+  },
+  "type": "module",
+  "peerDependencies": {
+    "@observablehq/runtime": "4 - 5"
+  }
+}

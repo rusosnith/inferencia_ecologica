@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inferenciómetro Online</title>
+    <!-- CSS -->
+    <link rel="stylesheet" href="styles.css">
+
+    <!-- PapaParse for CSV reading -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <!-- D3 and d3-sankey -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
+</head>
+
+<body>
+    <div class="app-container">
+        <header>
+            <h1>📊 Inferenciómetro Ecológico</h1>
+            <p>Calcula transferencias de votos entre dos elecciones usando inferencia ecológica bayesiana directamente
+                en tu navegador.</p>
+        </header>
+
+        <main>
+            <!-- Step 1: Upload Data -->
+            <section class="card" id="step-upload">
+                <h2>1. Carga de Datos</h2>
+                <div class="upload-grid">
+                    <div class="upload-box" id="drop-origin">
+                        <h3>Elección Origen (e.g. PASO / Año anterior)</h3>
+                        <p>Arrastra tu archivo CSV aquí o haz clic para subir</p>
+                        <input type="file" id="file-origin" accept=".csv" style="display: none;">
+                        <div class="file-status" id="status-origin">Esperando archivo...</div>
+                    </div>
+                    <div class="upload-box" id="drop-target">
+                        <h3>Elección Destino (e.g. Generales / Año actual)</h3>
+                        <p>Arrastra tu archivo CSV aquí o haz clic para subir</p>
+                        <input type="file" id="file-target" accept=".csv" style="display: none;">
+                        <div class="file-status" id="status-target">Esperando archivo...</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Step 2: Mapping -->
+            <section class="card disabled" id="step-mapping">
+                <h2>2. Mapeo de Columnas</h2>
+                <p>Configura cómo interpretar los archivos CSV subidos.</p>
+                <div class="mapping-grid">
+                    <div class="mapping-col">
+                        <h3>Configuración Común</h3>
+                        <label>Columna de ID (e.g. Circuito, Mesa):
+                            <select id="map-id" disabled>
+                                <option>Selecciona un archivo primero</option>
+                            </select>
+                        </label>
+                        <label>Padrón (Cantidad de Electores):
+                            <select id="map-electorate" disabled>
+                                <option>Selecciona un archivo</option>
+                            </select>
+                        </label>
+                    </div>
+
+                    <div class="mapping-col">
+                        <h3>Partidos Origen</h3>
+                        <div class="checkbox-group" id="parties-origin">
+                            <em>Sube el archivo de origen para ver las columnas</em>
+                        </div>
+                    </div>
+
+                    <div class="mapping-col">
+                        <h3>Partidos Destino</h3>
+                        <div class="checkbox-group" id="parties-target">
+                            <em>Sube el archivo de destino para ver las columnas</em>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="action-bar">
+                    <div class="mcmc-settings">
+                        <label for="mcmc-preset" style="color: #cbd5e1; font-size: 0.9em;">Precisión del Modelo:</label>
+                        <select id="mcmc-preset" class="styled-select">
+                            <option value="fast" selected>Rápido (Prueba, ~1 min)</option>
+                            <option value="medium">Normal (Equilibrado, ~3-4 mins)</option>
+                            <option value="accurate">Preciso (Lento, +10 mins)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="action-bar" style="margin-top: 15px;">
+                    <button class="primary-btn" id="btn-run" disabled>Ejecutar Inferencia</button>
+                    <div id="webr-status" class="status-badge loading">Motor R Inicializando...</div>
+                </div>
+            </section>
+
+            <!-- Step 3: Results -->
+            <section class="card disabled" id="step-results">
+                <h2>3. Resultados y Flujos</h2>
+                <div class="results-layout">
+                    <!-- Sankey Chart Container -->
+                    <div id="sankey-container" class="viz-container"></div>
+
+                    <!-- Download Options -->
+                    <div class="download-panel">
+                        <h3>Descargas</h3>
+                        <button id="btn-dl-matrix" class="secondary-btn">⬇️ Matriz de Probabilidades (CSV)</button>
+                        <button id="btn-dl-flows" class="secondary-btn">⬇️ Flujos Absolutos (CSV)</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Construido con <a href="https://docs.r-wasm.org/webr/latest/" target="_blank">webR</a>, <a
+                    href="https://cran.r-project.org/web/packages/eiPack/index.html" target="_blank">eiPack</a> y <a
+                    href="https://d3js.org/" target="_blank">D3.js</a>. Computado localmente en tu navegador.</p>
+        </footer>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+
+</html>
