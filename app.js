@@ -112,14 +112,18 @@ function updateMappingUI() {
     if (state.originData && state.targetData) {
         stepMapping.classList.remove('disabled');
         
-        // Find common headers for ID and Electorate
-        const commonHeaders = state.originHeaders.filter(h => state.targetHeaders.includes(h));
+        const mapIdOrigin = document.getElementById('map-id-origin');
+        const mapIdTarget = document.getElementById('map-id-target');
+        const mapPopOrigin = document.getElementById('map-pop-origin');
+        const mapPopTarget = document.getElementById('map-pop-target');
+
+        populateSelect(mapIdOrigin, state.originHeaders, "circuitoId");
+        populateSelect(mapIdTarget, state.targetHeaders, "circuitoId");
+        populateSelect(mapPopOrigin, state.originHeaders, "cantidadElectores");
+        populateSelect(mapPopTarget, state.targetHeaders, "cantidadElectores");
         
-        populateSelect(mapId, commonHeaders, "circuitoId");
-        populateSelect(mapElectorate, commonHeaders, "cantidadElectores");
-        
-        mapId.disabled = false;
-        mapElectorate.disabled = false;
+        mapIdOrigin.disabled = false; mapIdTarget.disabled = false;
+        mapPopOrigin.disabled = false; mapPopTarget.disabled = false;
 
         const dataFormat = document.getElementById('data-format').value;
         const wideCols = document.querySelectorAll('.mapping-wide');
@@ -136,14 +140,18 @@ function updateMappingUI() {
             wideCols.forEach(el => el.style.display = 'none');
             stackedCols.forEach(el => el.style.display = 'block');
 
-            const mapPartyName = document.getElementById('map-party-name');
-            const mapPartyVotes = document.getElementById('map-party-votes');
+            const mapPartyNameOrig = document.getElementById('map-party-name-origin');
+            const mapPartyNameTarg = document.getElementById('map-party-name-target');
+            const mapPartyVotesOrig = document.getElementById('map-party-votes-origin');
+            const mapPartyVotesTarg = document.getElementById('map-party-votes-target');
             
-            populateSelect(mapPartyName, commonHeaders, "agrupacion");
-            populateSelect(mapPartyVotes, commonHeaders, "votos");
+            populateSelect(mapPartyNameOrig, state.originHeaders, "agrupacion");
+            populateSelect(mapPartyNameTarg, state.targetHeaders, "agrupacion");
+            populateSelect(mapPartyVotesOrig, state.originHeaders, "votos");
+            populateSelect(mapPartyVotesTarg, state.targetHeaders, "votos");
             
-            mapPartyName.disabled = false;
-            mapPartyVotes.disabled = false;
+            mapPartyNameOrig.disabled = false; mapPartyNameTarg.disabled = false;
+            mapPartyVotesOrig.disabled = false; mapPartyVotesTarg.disabled = false;
         }
         
         checkReadyToRun();
@@ -151,8 +159,14 @@ function updateMappingUI() {
 }
 
 document.getElementById('data-format').addEventListener('change', updateMappingUI);
-document.getElementById('map-party-name')?.addEventListener('change', checkReadyToRun);
-document.getElementById('map-party-votes')?.addEventListener('change', checkReadyToRun);
+document.getElementById('map-party-name-origin')?.addEventListener('change', checkReadyToRun);
+document.getElementById('map-party-name-target')?.addEventListener('change', checkReadyToRun);
+document.getElementById('map-party-votes-origin')?.addEventListener('change', checkReadyToRun);
+document.getElementById('map-party-votes-target')?.addEventListener('change', checkReadyToRun);
+document.getElementById('map-id-origin')?.addEventListener('change', checkReadyToRun);
+document.getElementById('map-id-target')?.addEventListener('change', checkReadyToRun);
+document.getElementById('map-pop-origin')?.addEventListener('change', checkReadyToRun);
+document.getElementById('map-pop-target')?.addEventListener('change', checkReadyToRun);
 
 function populateSelect(selectEl, options, likelyName) {
     selectEl.innerHTML = '';
@@ -209,9 +223,11 @@ function checkReadyToRun() {
             const targetParties = getSelectedParties('parties-target');
             isReady = originParties.length > 0 && targetParties.length > 0;
         } else {
-            const partyNameCol = document.getElementById('map-party-name').value;
-            const partyVotesCol = document.getElementById('map-party-votes').value;
-            isReady = partyNameCol && partyVotesCol;
+            const partyNameColOrig = document.getElementById('map-party-name-origin').value;
+            const partyVotesColOrig = document.getElementById('map-party-votes-origin').value;
+            const partyNameColTarg = document.getElementById('map-party-name-target').value;
+            const partyVotesColTarg = document.getElementById('map-party-votes-target').value;
+            isReady = partyNameColOrig && partyVotesColOrig && partyNameColTarg && partyVotesColTarg;
         }
     }
     
@@ -264,8 +280,10 @@ btnRun.onclick = async () => {
     };
     
     try {
-        const idCol = mapId.value;
-        const popCol = mapElectorate.value;
+        const idColOrig = document.getElementById('map-id-origin').value;
+        const idColTarg = document.getElementById('map-id-target').value;
+        const popColOrig = document.getElementById('map-pop-origin').value;
+        const popColTarg = document.getElementById('map-pop-target').value;
         const dataFormat = document.getElementById('data-format').value;
         
         let srcParties = [];
@@ -278,14 +296,17 @@ btnRun.onclick = async () => {
             srcParties = getSelectedParties('parties-origin');
             tgtParties = getSelectedParties('parties-target');
         } else {
-            const partyNameCol = document.getElementById('map-party-name').value;
-            const partyVotesCol = document.getElementById('map-party-votes').value;
+            const partyNameColOrig = document.getElementById('map-party-name-origin').value;
+            const partyVotesColOrig = document.getElementById('map-party-votes-origin').value;
             
-            const origPivoted = pivotStackedToWide(state.originData, idCol, popCol, partyNameCol, partyVotesCol);
+            const origPivoted = pivotStackedToWide(state.originData, idColOrig, popColOrig, partyNameColOrig, partyVotesColOrig);
             originProcData = origPivoted.data;
             srcParties = origPivoted.parties;
             
-            const tgtPivoted = pivotStackedToWide(state.targetData, idCol, popCol, partyNameCol, partyVotesCol);
+            const partyNameColTarg = document.getElementById('map-party-name-target').value;
+            const partyVotesColTarg = document.getElementById('map-party-votes-target').value;
+
+            const tgtPivoted = pivotStackedToWide(state.targetData, idColTarg, popColTarg, partyNameColTarg, partyVotesColTarg);
             targetProcData = tgtPivoted.data;
             tgtParties = tgtPivoted.parties;
         }
@@ -297,8 +318,8 @@ btnRun.onclick = async () => {
         // Create a lookup for target data
         const tgtLookup = new Map();
         targetProcData.forEach(row => {
-            if(row[idCol] !== undefined) {
-               tgtLookup.set(String(row[idCol]), row);
+            if(row[idColTarg] !== undefined) {
+               tgtLookup.set(String(row[idColTarg]), row);
             }
         });
         
@@ -308,8 +329,8 @@ btnRun.onclick = async () => {
         srcParties.forEach(p => totalSrcVotes[p] = 0);
 
         originProcData.forEach(srcRow => {
-            const id = String(srcRow[idCol]);
-            const popSrc = Number(srcRow[popCol]) || 0;
+            const id = String(srcRow[idColOrig]);
+            const popSrc = Number(srcRow[popColOrig]) || 0;
             const tgtRow = tgtLookup.get(id);
             
             if (tgtRow && popSrc > 0) {

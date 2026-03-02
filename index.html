@@ -51,21 +51,32 @@
                 <div class="mapping-grid">
                     <div class="mapping-col">
                         <h3>Configuración Común</h3>
-                        <label>Columna de ID (e.g. Circuito, Mesa):
-                            <select id="map-id" disabled>
-                                <option>Selecciona un archivo primero</option>
-                            </select>
-                        </label>
-                        <label>Padrón (Cantidad de Electores):
-                            <select id="map-electorate" disabled>
-                                <option>Selecciona un archivo</option>
-                            </select>
-                        </label>
                         <label>Formato de los Datos:
                             <select id="data-format">
                                 <option value="wide" selected>Wide (1 columna por partido)</option>
                                 <option value="stacked">Stacked / Long (Filas por partido)</option>
                             </select>
+                        </label>
+                        <div style="margin: 1rem 0; height: 1px; background: var(--border-color);"></div>
+                        <label>Columna de ID (e.g. Circuito, Mesa):
+                            <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                                <select id="map-id-origin" disabled title="ID en tabla Origen">
+                                    <option>Origen</option>
+                                </select>
+                                <select id="map-id-target" disabled title="ID en tabla Destino">
+                                    <option>Destino</option>
+                                </select>
+                            </div>
+                        </label>
+                        <label>Padrón (Cantidad de Electores):
+                            <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                                <select id="map-pop-origin" disabled title="Padrón en tabla Origen">
+                                    <option>Origen</option>
+                                </select>
+                                <select id="map-pop-target" disabled title="Padrón en tabla Destino">
+                                    <option>Destino</option>
+                                </select>
+                            </div>
                         </label>
                     </div>
 
@@ -86,14 +97,24 @@
                     <div class="mapping-col mapping-stacked" style="display: none;">
                         <h3>Configuración Stacked</h3>
                         <label>Columna con el Nombre del Partido:
-                            <select id="map-party-name" disabled>
-                                <option>Selecciona un archivo</option>
-                            </select>
+                            <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                                <select id="map-party-name-origin" disabled title="Nombre de Partido en Origen">
+                                    <option>Origen</option>
+                                </select>
+                                <select id="map-party-name-target" disabled title="Nombre de Partido en Destino">
+                                    <option>Destino</option>
+                                </select>
+                            </div>
                         </label>
                         <label>Columna con los Votos:
-                            <select id="map-party-votes" disabled>
-                                <option>Selecciona un archivo</option>
-                            </select>
+                            <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                                <select id="map-party-votes-origin" disabled title="Votos en Origen">
+                                    <option>Origen</option>
+                                </select>
+                                <select id="map-party-votes-target" disabled title="Votos en Destino">
+                                    <option>Destino</option>
+                                </select>
+                            </div>
                         </label>
                     </div>
                 </div>
