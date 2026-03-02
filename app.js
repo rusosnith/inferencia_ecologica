@@ -350,13 +350,6 @@ btnRun.onclick = async () => {
                         totalSrcVotes[p] += votes;
                     });
                     
-                    // Normalize X to sum exactly to 1 (fix eiPack error)
-                    if (xSum > 0 && Math.abs(xSum - 1.0) > 1e-8) {
-                        srcParties.forEach((p, i) => {
-                            row[`x${i+1}`] = row[`x${i+1}`] / xSum;
-                        });
-                    }
-                    
                     // T proportions (target, relative to SRC population per simplified methodology)
                     let tSum = 0;
                     tgtParties.forEach((p, j) => {
@@ -366,14 +359,34 @@ btnRun.onclick = async () => {
                          tSum += prop;
                     });
                     
-                    // Normalize T to sum exactly to 1 (fix eiPack error)
-                    if (tSum > 0 && Math.abs(tSum - 1.0) > 1e-8) {
-                        tgtParties.forEach((p, j) => {
-                             row[`t${j+1}`] = row[`t${j+1}`] / tSum;
+                    // Skip circuits with 0 votes in either election which cause eiPack margins to fail
+                    if (xSum > 0 && tSum > 0) {
+                        // Normalize X to sum exactly to 1.0, absorbing float precision in last category
+                        let currentXSum = 0;
+                        srcParties.forEach((p, i) => {
+                            if (i === srcParties.length - 1) {
+                                row[`x${i+1}`] = Math.max(0, 1.0 - currentXSum);
+                            } else {
+                                let val = row[`x${i+1}`] / xSum;
+                                row[`x${i+1}`] = val;
+                                currentXSum += val;
+                            }
                         });
+                        
+                        // Normalize T to sum exactly to 1.0, absorbing float precision in last category
+                        let currentTSum = 0;
+                        tgtParties.forEach((p, j) => {
+                            if (j === tgtParties.length - 1) {
+                                row[`t${j+1}`] = Math.max(0, 1.0 - currentTSum);
+                            } else {
+                                let val = row[`t${j+1}`] / tSum;
+                                row[`t${j+1}`] = val;
+                                currentTSum += val;
+                            }
+                        });
+                        
+                        mergedData.push(row);
                     }
-                    
-                    mergedData.push(row);
                 }
             }
         });
