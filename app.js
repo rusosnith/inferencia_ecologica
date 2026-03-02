@@ -334,7 +334,7 @@ btnRun.onclick = async () => {
             const tgtRow = tgtLookup.get(id);
             
             if (tgtRow && popSrc > 0) {
-                const popTgt = Number(tgtRow[popCol]) || 0;
+                const popTgt = Number(tgtRow[popColTarg]) || 0;
                 
                 // Stability filter (15% tolerance)
                 if (popTgt <= 1.15 * popSrc && popTgt >= 0.85 * popSrc) {
