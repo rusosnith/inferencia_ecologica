@@ -120,14 +120,39 @@ function updateMappingUI() {
         
         mapId.disabled = false;
         mapElectorate.disabled = false;
-        
-        // Populate parties checkboxes (exclude selected ID and Electorate if possible)
-        populateCheckboxes(partiesOriginContainer, state.originHeaders, "origin");
-        populateCheckboxes(partiesTargetContainer, state.targetHeaders, "target");
+
+        const dataFormat = document.getElementById('data-format').value;
+        const wideCols = document.querySelectorAll('.mapping-wide');
+        const stackedCols = document.querySelectorAll('.mapping-stacked');
+
+        if (dataFormat === 'wide') {
+            wideCols.forEach(el => el.style.display = 'block');
+            stackedCols.forEach(el => el.style.display = 'none');
+            
+            // Populate parties checkboxes (exclude selected ID and Electorate if possible)
+            populateCheckboxes(partiesOriginContainer, state.originHeaders, "origin");
+            populateCheckboxes(partiesTargetContainer, state.targetHeaders, "target");
+        } else {
+            wideCols.forEach(el => el.style.display = 'none');
+            stackedCols.forEach(el => el.style.display = 'block');
+
+            const mapPartyName = document.getElementById('map-party-name');
+            const mapPartyVotes = document.getElementById('map-party-votes');
+            
+            populateSelect(mapPartyName, commonHeaders, "agrupacion");
+            populateSelect(mapPartyVotes, commonHeaders, "votos");
+            
+            mapPartyName.disabled = false;
+            mapPartyVotes.disabled = false;
+        }
         
         checkReadyToRun();
     }
 }
+
+document.getElementById('data-format').addEventListener('change', updateMappingUI);
+document.getElementById('map-party-name')?.addEventListener('change', checkReadyToRun);
+document.getElementById('map-party-votes')?.addEventListener('change', checkReadyToRun);
 
 function populateSelect(selectEl, options, likelyName) {
     selectEl.innerHTML = '';
@@ -175,14 +200,49 @@ function getSelectedParties(containerId) {
 }
 
 function checkReadyToRun() {
-    const originParties = getSelectedParties('parties-origin');
-    const targetParties = getSelectedParties('parties-target');
-    
-    if (state.webRReady && state.originData && state.targetData && originParties.length > 0 && targetParties.length > 0) {
-        btnRun.disabled = false;
-    } else {
-        btnRun.disabled = true;
+    const dataFormat = document.getElementById('data-format').value;
+    let isReady = false;
+
+    if (state.webRReady && state.originData && state.targetData) {
+        if (dataFormat === 'wide') {
+            const originParties = getSelectedParties('parties-origin');
+            const targetParties = getSelectedParties('parties-target');
+            isReady = originParties.length > 0 && targetParties.length > 0;
+        } else {
+            const partyNameCol = document.getElementById('map-party-name').value;
+            const partyVotesCol = document.getElementById('map-party-votes').value;
+            isReady = partyNameCol && partyVotesCol;
+        }
     }
+    
+    btnRun.disabled = !isReady;
+}
+
+// Data parser logic (Stack to Wide internally)
+function pivotStackedToWide(rawData, idCol, popCol, partyNameCol, partyVotesCol) {
+    const wideData = new Map();
+    const partiesFound = new Set();
+    
+    rawData.forEach(row => {
+        const id = String(row[idCol]);
+        if (!wideData.has(id)) {
+            const newRow = {};
+            newRow[idCol] = id;
+            newRow[popCol] = row[popCol];
+            wideData.set(id, newRow);
+        }
+        const party = row[partyNameCol];
+        const votes = Number(row[partyVotesCol]) || 0;
+        if (party) {
+            partiesFound.add(party);
+            wideData.get(id)[party] = votes;
+        }
+    });
+    
+    return {
+        data: Array.from(wideData.values()),
+        parties: Array.from(partiesFound)
+    };
 }
 
 // ---- Run Inference ----
@@ -206,8 +266,29 @@ btnRun.onclick = async () => {
     try {
         const idCol = mapId.value;
         const popCol = mapElectorate.value;
-        const srcParties = getSelectedParties('parties-origin');
-        const tgtParties = getSelectedParties('parties-target');
+        const dataFormat = document.getElementById('data-format').value;
+        
+        let srcParties = [];
+        let tgtParties = [];
+        
+        let originProcData = state.originData;
+        let targetProcData = state.targetData;
+
+        if (dataFormat === 'wide') {
+            srcParties = getSelectedParties('parties-origin');
+            tgtParties = getSelectedParties('parties-target');
+        } else {
+            const partyNameCol = document.getElementById('map-party-name').value;
+            const partyVotesCol = document.getElementById('map-party-votes').value;
+            
+            const origPivoted = pivotStackedToWide(state.originData, idCol, popCol, partyNameCol, partyVotesCol);
+            originProcData = origPivoted.data;
+            srcParties = origPivoted.parties;
+            
+            const tgtPivoted = pivotStackedToWide(state.targetData, idCol, popCol, partyNameCol, partyVotesCol);
+            targetProcData = tgtPivoted.data;
+            tgtParties = tgtPivoted.parties;
+        }
 
         // Prepare data matrices for R
         // R expects essentially a single dataset merged by ID
@@ -215,7 +296,7 @@ btnRun.onclick = async () => {
         
         // Create a lookup for target data
         const tgtLookup = new Map();
-        state.targetData.forEach(row => {
+        targetProcData.forEach(row => {
             if(row[idCol] !== undefined) {
                tgtLookup.set(String(row[idCol]), row);
             }
@@ -226,7 +307,7 @@ btnRun.onclick = async () => {
         let totalSrcVotes = {};
         srcParties.forEach(p => totalSrcVotes[p] = 0);
 
-        state.originData.forEach(srcRow => {
+        originProcData.forEach(srcRow => {
             const id = String(srcRow[idCol]);
             const popSrc = Number(srcRow[popCol]) || 0;
             const tgtRow = tgtLookup.get(id);

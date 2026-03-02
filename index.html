@@ -61,20 +61,40 @@
                                 <option>Selecciona un archivo</option>
                             </select>
                         </label>
+                        <label>Formato de los Datos:
+                            <select id="data-format">
+                                <option value="wide" selected>Wide (1 columna por partido)</option>
+                                <option value="stacked">Stacked / Long (Filas por partido)</option>
+                            </select>
+                        </label>
                     </div>
 
-                    <div class="mapping-col">
-                        <h3>Partidos Origen</h3>
+                    <div class="mapping-col mapping-wide">
+                        <h3>Partidos Origen (Wide)</h3>
                         <div class="checkbox-group" id="parties-origin">
                             <em>Sube el archivo de origen para ver las columnas</em>
                         </div>
                     </div>
 
-                    <div class="mapping-col">
-                        <h3>Partidos Destino</h3>
+                    <div class="mapping-col mapping-wide">
+                        <h3>Partidos Destino (Wide)</h3>
                         <div class="checkbox-group" id="parties-target">
                             <em>Sube el archivo de destino para ver las columnas</em>
                         </div>
+                    </div>
+
+                    <div class="mapping-col mapping-stacked" style="display: none;">
+                        <h3>Configuración Stacked</h3>
+                        <label>Columna con el Nombre del Partido:
+                            <select id="map-party-name" disabled>
+                                <option>Selecciona un archivo</option>
+                            </select>
+                        </label>
+                        <label>Columna con los Votos:
+                            <select id="map-party-votes" disabled>
+                                <option>Selecciona un archivo</option>
+                            </select>
+                        </label>
                     </div>
                 </div>
 
