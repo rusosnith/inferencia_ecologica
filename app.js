@@ -445,52 +445,54 @@ btnRun.onclick = async () => {
             
             # Calculate circuit-level averages
             beta_means <- apply(res$draws$Beta, 2, mean)
+            nms <- names(beta_means)
             
-            # WebR needs a flat numeric vector
-            beta_means
+            x_cols <- c("${xCols.join('","')}")
+            t_cols <- c("${tCols.join('","')}")
+            
+            # Create explicitly ordered Matrix
+            res_mat <- matrix(0, nrow=length(x_cols), ncol=length(t_cols))
+            
+            for (i in seq_along(nms)) {
+                nm <- nms[i]
+                if (grepl("^beta\\\\.", nm)) {
+                    # Splitting: beta . x_column . t_column
+                    parts <- strsplit(nm, "\\\\.")[[1]]
+                    if (length(parts) >= 3) {
+                         x_name <- parts[2]
+                         t_name <- parts[3]
+                         
+                         idx_x <- match(x_name, x_cols)
+                         idx_t <- match(t_name, t_cols)
+                         
+                         if (!is.na(idx_x) && !is.na(idx_t)) {
+                             res_mat[idx_x, idx_t] <- beta_means[i]
+                         }
+                    }
+                }
+            }
+            
+            # Flatten Row-Major (transpose first) to safely rebuild in JS
+            as.vector(t(res_mat))
         `;
         
         const result = await webR.evalR(rCode);
         const matrixFlat = await result.toJs(); 
         const values = matrixFlat.values;
         
-        // The Beta matrix from ei.MD.bayes has (num_circuits * num_src * num_tgt) parameters.
-        // We've already averaged them in R, so `values` is an array of size (num_src * num_tgt)
-        // However, R is column-major.
         const numRows = srcParties.length;
         const numCols = tgtParties.length;
         
-        // Reshape into transfer matrix
-        let transferMatrix;
-        
+        // Reshape into transfer matrix cleanly
+        let transferMatrix = [];
         try {
-            // Attempt 1: Direct reshape assuming the R apply logic returned a flat array 
-            // of length (numRows * numCols)
-            if (values.length === numRows * numCols) {
-                // R arrays are column-major
-                transferMatrix = [];
-                for (let r = 0; r < numRows; r++) {
-                    const rowArr = [];
-                    for (let c = 0; c < numCols; c++) {
-                        rowArr.push(values[c * numRows + r]);
-                    }
-                    transferMatrix.push(rowArr);
+            for (let r = 0; r < numRows; r++) {
+                const rowArr = [];
+                for (let c = 0; c < numCols; c++) {
+                    const val = values[r * numCols + c] || 0;
+                    rowArr.push(val);
                 }
-            } else if (values.length > numRows * numCols) {
-                // If it came back as a large array (params per circuit), we do the averaging in JS
-                // This handles the case where the R script returns the full Beta matrix
-                const circuits_used = values.length / (numRows * numCols);
-                transferMatrix = Array(numRows).fill().map(() => Array(numCols).fill(0));
-                
-                for(let i=0; i<values.length; i++) {
-                     // R indexing logic (column major, nested)
-                     const param_idx = i % (numRows * numCols);
-                     const col = Math.floor(param_idx / numRows);
-                     const row = param_idx % numRows;
-                     transferMatrix[row][col] += values[i] / circuits_used;
-                }
-            } else {
-                 throw new Error(`Unexpected return length from R: ${values.length}`);
+                transferMatrix.push(rowArr);
             }
         } catch (e) {
             console.error("Matrix reshape error:", e, values);
