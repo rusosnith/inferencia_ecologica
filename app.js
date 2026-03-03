@@ -234,8 +234,35 @@ function checkReadyToRun() {
     btnRun.disabled = !isReady;
 }
 
-// Data parser logic (Stack to Wide internally)
-function pivotStackedToWide(rawData, idCol, popCol, partyNameCol, partyVotesCol) {
+// Data parser logic (Stack to Wide internally) with minor party grouping
+function pivotStackedToWide(rawData, idCol, popCol, partyNameCol, partyVotesCol, minPercent = 0.02) {
+    // 1. Calculate global votes per party to determine thresholds
+    const globalVotes = new Map();
+    let totalVotes = 0;
+    
+    rawData.forEach(row => {
+        const party = row[partyNameCol];
+        const votes = Number(row[partyVotesCol]) || 0;
+        if (party && votes > 0) {
+            globalVotes.set(party, (globalVotes.get(party) || 0) + votes);
+            totalVotes += votes;
+        }
+    });
+    
+    // Determine which parties keep their names, and which become 'OTROS (<2%)'
+    const partyMapping = new Map();
+    const OTROS_LABEL = "OTROS (<2%)";
+    let hasOtros = false;
+    
+    globalVotes.forEach((votes, party) => {
+        if (votes / totalVotes >= minPercent) {
+            partyMapping.set(party, party);
+        } else {
+            partyMapping.set(party, OTROS_LABEL);
+            hasOtros = true;
+        }
+    });
+
     const wideData = new Map();
     const partiesFound = new Set();
     
@@ -247,11 +274,16 @@ function pivotStackedToWide(rawData, idCol, popCol, partyNameCol, partyVotesCol)
             newRow[popCol] = row[popCol];
             wideData.set(id, newRow);
         }
-        const party = row[partyNameCol];
+        
+        const rawParty = row[partyNameCol];
         const votes = Number(row[partyVotesCol]) || 0;
-        if (party) {
-            partiesFound.add(party);
-            wideData.get(id)[party] = votes;
+        
+        if (rawParty) {
+            const mappedParty = partyMapping.get(rawParty);
+            if (mappedParty) {
+                partiesFound.add(mappedParty);
+                wideData.get(id)[mappedParty] = (wideData.get(id)[mappedParty] || 0) + votes;
+            }
         }
     });
     
