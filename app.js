@@ -357,8 +357,12 @@ btnRun.onclick = async () => {
         
         // Filter and merge strictly on ID
         const mergedData = [];
+        const SRC_REST = "Ausentes / Blancos / Nulos";
+        const TGT_REST = "Ausentes / Blancos / Nulos";
+        
         let totalSrcVotes = {};
         srcParties.forEach(p => totalSrcVotes[p] = 0);
+        totalSrcVotes[SRC_REST] = 0;
 
         originProcData.forEach(srcRow => {
             const id = String(srcRow[idColOrig]);
@@ -372,50 +376,40 @@ btnRun.onclick = async () => {
                 if (popTgt <= 1.15 * popSrc && popTgt >= 0.85 * popSrc) {
                     const row = { n: popSrc };
                     
-                    // X proportions (source)
-                    let xSum = 0;
-                    srcParties.forEach((p, i) => {
+                    let xPos = 0;
+                    srcParties.forEach((p) => {
                         const votes = Number(srcRow[p]) || 0;
-                        const prop = votes / popSrc;
-                        row[`x${i+1}`] = prop;
-                        xSum += prop;
+                        xPos += votes;
                         totalSrcVotes[p] += votes;
                     });
+                    const xRest = Math.max(0, popSrc - xPos);
+                    totalSrcVotes[SRC_REST] += xRest;
                     
-                    // T proportions (target, relative to SRC population per simplified methodology)
-                    let tSum = 0;
-                    tgtParties.forEach((p, j) => {
-                         const votes = Number(tgtRow[p]) || 0;
-                         const prop = votes / popSrc;
-                         row[`t${j+1}`] = prop;
-                         tSum += prop;
+                    let tPos = 0;
+                    tgtParties.forEach((p) => {
+                         tPos += Number(tgtRow[p]) || 0;
                     });
+                    const tRest = Math.max(0, popSrc - tPos); // Relative to popSrc for consistent EI bounds
                     
-                    // Skip circuits with 0 votes in either election which cause eiPack margins to fail
-                    if (xSum > 0 && tSum > 0) {
-                        // Normalize X to sum exactly to 1.0, absorbing float precision in last category
-                        let currentXSum = 0;
+                    // Skip mathematically impossible circuits (more votes than registered voters)
+                    if (xPos <= popSrc && tPos <= popSrc) {
                         srcParties.forEach((p, i) => {
-                            if (i === srcParties.length - 1) {
-                                row[`x${i+1}`] = Math.max(0, 1.0 - currentXSum);
-                            } else {
-                                let val = row[`x${i+1}`] / xSum;
-                                row[`x${i+1}`] = val;
-                                currentXSum += val;
-                            }
+                            row[`x${i+1}`] = (Number(srcRow[p]) || 0) / popSrc;
                         });
+                        row[`x_rest`] = xRest / popSrc;
                         
-                        // Normalize T to sum exactly to 1.0, absorbing float precision in last category
-                        let currentTSum = 0;
                         tgtParties.forEach((p, j) => {
-                            if (j === tgtParties.length - 1) {
-                                row[`t${j+1}`] = Math.max(0, 1.0 - currentTSum);
-                            } else {
-                                let val = row[`t${j+1}`] / tSum;
-                                row[`t${j+1}`] = val;
-                                currentTSum += val;
-                            }
+                            row[`t${j+1}`] = (Number(tgtRow[p]) || 0) / popSrc;
                         });
+                        row[`t_rest`] = tRest / popSrc;
+                        
+                        // Force absolute 1.0 row margins by putting float errors into the residual category
+                        let cX = 0, cT = 0;
+                        srcParties.forEach((p, i) => cX += row[`x${i+1}`]);
+                        row[`x_rest`] = Math.max(0, 1.0 - cX);
+                        
+                        tgtParties.forEach((p, j) => cT += row[`t${j+1}`]);
+                        row[`t_rest`] = Math.max(0, 1.0 - cT);
                         
                         mergedData.push(row);
                     }
@@ -445,7 +439,11 @@ btnRun.onclick = async () => {
         
         // Construct formula
         const tCols = tgtParties.map((_, i) => `t${i+1}`);
+        tCols.push('t_rest');
+        
         const xCols = srcParties.map((_, i) => `x${i+1}`);
+        xCols.push('x_rest');
+        
         const formulaStr = `cbind(${tCols.join(',')}) ~ cbind(${xCols.join(',')})`;
         
         // Determine MCMC settings
@@ -512,8 +510,11 @@ btnRun.onclick = async () => {
         const matrixFlat = await result.toJs(); 
         const values = matrixFlat.values;
         
-        const numRows = srcParties.length;
-        const numCols = tgtParties.length;
+        const fullSrcParties = [...srcParties, SRC_REST];
+        const fullTgtParties = [...tgtParties, TGT_REST];
+        
+        const numRows = fullSrcParties.length;
+        const numCols = fullTgtParties.length;
         
         // Reshape into transfer matrix cleanly
         let transferMatrix = [];
@@ -536,17 +537,23 @@ btnRun.onclick = async () => {
         const absoluteFlows = [];
         
         for (let r = 0; r < numRows; r++) {
-            const srcParty = srcParties[r] + " (Orig)";
-            const srcTotal = totalSrcVotes[srcParties[r]];
+            const srcParty = fullSrcParties[r] + " (Orig)";
+            const srcTotal = totalSrcVotes[fullSrcParties[r]];
             
             for (let c = 0; c < numCols; c++) {
-                const tgtParty = tgtParties[c] + " (Dest)";
+                const tgtParty = fullTgtParties[c] + " (Dest)";
                 const prob = transferMatrix[r][c];
                 const estVotes = Math.round(srcTotal * prob);
                 
+                // Exclude the completely meaningless "Ausentes (Orig) -> Ausentes (Dest)" self-loop 
+                // to avoid crushing the scale of political flows in the Sankey visualization
+                if (fullSrcParties[r] === SRC_REST && fullTgtParties[c] === TGT_REST) {
+                    continue;
+                }
+                
                 if (estVotes > 0) {
                     graphData.push({ source: srcParty, target: tgtParty, value: estVotes });
-                    absoluteFlows.push({ Origen: srcParties[r], Destino: tgtParties[c], Probabilidad: prob, Votos_Estimados: estVotes });
+                    absoluteFlows.push({ Origen: fullSrcParties[r], Destino: fullTgtParties[c], Probabilidad: prob, Votos_Estimados: estVotes });
                 }
             }
         }
