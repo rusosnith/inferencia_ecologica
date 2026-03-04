@@ -234,32 +234,33 @@ function checkReadyToRun() {
     btnRun.disabled = !isReady;
 }
 
-// Data parser logic (Stack to Wide internally) with minor party grouping
-function pivotStackedToWide(rawData, idCol, popCol, partyNameCol, partyVotesCol, minPercent = 0.02) {
-    // 1. Calculate global votes per party to determine thresholds
+// Data parser logic (Stack to Wide internally) forcing exactly Top 6 + OTROS
+function pivotStackedToWide(rawData, idCol, popCol, partyNameCol, partyVotesCol) {
+    // 1. Calculate global votes per party to determine Top 6
     const globalVotes = new Map();
-    let totalVotes = 0;
     
     rawData.forEach(row => {
         const party = row[partyNameCol];
         const votes = Number(row[partyVotesCol]) || 0;
         if (party && votes > 0) {
             globalVotes.set(party, (globalVotes.get(party) || 0) + votes);
-            totalVotes += votes;
         }
     });
     
-    // Determine which parties keep their names, and which become 'OTROS (<2%)'
-    const partyMapping = new Map();
-    const OTROS_LABEL = "OTROS (<2%)";
-    let hasOtros = false;
+    // Sort parties by volume descending
+    const sortedParties = Array.from(globalVotes.entries()).sort((a, b) => b[1] - a[1]);
     
-    globalVotes.forEach((votes, party) => {
-        if (votes / totalVotes >= minPercent) {
+    // Take Top 6, the rest goes to OTROS
+    const top6 = sortedParties.slice(0, 6).map(p => p[0]);
+    
+    const partyMapping = new Map();
+    const OTROS_LABEL = "OTROS";
+    
+    sortedParties.forEach(([party, _votes]) => {
+        if (top6.includes(party)) {
             partyMapping.set(party, party);
         } else {
             partyMapping.set(party, OTROS_LABEL);
-            hasOtros = true;
         }
     });
 
@@ -536,6 +537,9 @@ btnRun.onclick = async () => {
         const graphData = [];
         const absoluteFlows = [];
         
+        let validSrcVotes = 0;
+        let validTgtVotes = 0;
+        
         for (let r = 0; r < numRows; r++) {
             const srcParty = fullSrcParties[r] + " (Orig)";
             const srcTotal = totalSrcVotes[fullSrcParties[r]];
@@ -566,9 +570,23 @@ btnRun.onclick = async () => {
         webrStatus.className = 'status-badge ready';
         webrStatus.innerText = '✅ Inferencia Completada';
         
+        // Count valid active votes per election (excluding Ausentes itself) for D3 baseline
+        let activeSrcVotes = 0;
+        let activeTgtVotes = 0;
+        srcParties.forEach(p => activeSrcVotes += totalSrcVotes[p]);
+        tgtParties.forEach(p => {
+             // We can estimate the total valid target votes that actually participated
+             // by summing all estimated flows that arrived at target parties (excluding TGT_REST)
+             graphData.forEach(link => {
+                  if (link.target === p + " (Dest)") {
+                      activeTgtVotes += link.value;
+                  }
+             });
+        });
+        
         // Unlock results UI & Draw
         stepResults.classList.remove('disabled');
-        drawSankey(graphData);
+        drawSankey(graphData, activeSrcVotes, activeTgtVotes);
         setupDownloads();
         
     } catch(err) {
@@ -583,14 +601,14 @@ btnRun.onclick = async () => {
 }
 
 // ---- D3.js Visualization (Flow-o-Matic style) ----
-function drawSankey(data) {
+function drawSankey(data, activeSrcVotes, activeTgtVotes) {
     const container = document.getElementById('sankey-container');
     container.innerHTML = ''; // clear previous
     
     const width = container.clientWidth;
     const height = 600;
 
-    // Calcular el total para porcentajes
+    // Calcular el total global solo como fallback
     const total = d3.sum(data, (d) => d.value);
 
     // Data formatting for D3 Sankey
@@ -669,7 +687,13 @@ function drawSankey(data) {
         .attr("width", (d) => d.x1 - d.x0)
         .attr("fill", (d) => color(d.id || d.name))
         .append("title")
-        .text((d) => `${d.name}\n${((d.value / total) * 100).toFixed(1)}% (${d.value.toLocaleString()})`);
+        .text((d) => {
+            const isOrig = d.name.includes("(Orig)");
+            const isAus = d.name.includes("Ausentes");
+            const den = isOrig ? activeSrcVotes : activeTgtVotes;
+            const pct = isAus ? "N/A" : ((d.value / den) * 100).toFixed(1) + "%";
+            return `${d.name}\n${pct} de válidos (${d.value.toLocaleString()} votos globales)`;
+        });
 
     // Links con gradientes
     // Exact observable implementation:
@@ -685,7 +709,11 @@ function drawSankey(data) {
         .attr("stroke-width", (d) => Math.max(1, d.width))
         .style("mix-blend-mode", "multiply")
         .append("title")
-        .text((d) => `${d.source.name} → ${d.target.name}\n${((d.value / total) * 100).toFixed(1)}% (${d.value.toLocaleString()})`);
+        .text((d) => {
+            const isTargetAus = d.target.name.includes("Ausentes");
+            const pct = isTargetAus ? "N/A" : ((d.value / activeSrcVotes) * 100).toFixed(1) + "%";
+            return `${d.source.name} → ${d.target.name}\n${pct} (${d.value.toLocaleString()})`;
+        });
 
     // Labels con porcentajes
     svg.append("g")
@@ -701,7 +729,16 @@ function drawSankey(data) {
         .text((d) => getBaseName(d.name)) // Cleaner text without (Orig) / (Dest)
         .append("tspan")
         .attr("fill-opacity", 0.7)
-        .text((d) => ` ${((d.value / total) * 100).toFixed(1)}%`);
+        .text((d) => {
+            const isOrig = d.name.includes("(Orig)");
+            const isAus = d.name.includes("Ausentes");
+            const den = isOrig ? activeSrcVotes : activeTgtVotes;
+            if (isAus) {
+                 // Provide absolute volume for Ausentes rather than confusing the valid % denominator
+                 return ` (${d.value.toLocaleString()})`;
+            }
+            return ` ${((d.value / den) * 100).toFixed(1)}%`;
+        });
 
     // Fuente
     svg.append("text")

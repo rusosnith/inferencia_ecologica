@@ -26,10 +26,10 @@ Object.assign(html`<select>
 })
 )}
 
-function _chart(d3,data,width,height,color_config,unique_nodes)
+function _chart(d3,data,width,height,color_config,unique_nodes,originTotal,targetTotal)
 {
-  // Calcular el total para porcentajes
-  const total = d3.sum(data.links, (d) => d.value);
+  // Mantenemos el total global solo para métricas generales si hacen falta
+  const globalTotal = d3.sum(data.links, (d) => d.value);
 
   const svg = d3
     .create("svg")
@@ -104,10 +104,11 @@ function _chart(d3,data,width,height,color_config,unique_nodes)
     .attr("fill", (d) => color(d.id || d.name))
     .append("title")
     .text(
-      (d) =>
-        `${d.name}\n${((d.value / total) * 100).toFixed(
-          1
-        )}% (${d.value.toLocaleString()})`
+      (d) => {
+        const isOrig = d.name.includes("(Orig)");
+        const den = isOrig ? originTotal : targetTotal;
+        return `${d.name}\n${((d.value / den) * 100).toFixed(1)}% (${d.value.toLocaleString()})`
+      }
     );
 
   // Links con gradientes
@@ -123,11 +124,10 @@ function _chart(d3,data,width,height,color_config,unique_nodes)
     .attr("stroke-width", (d) => Math.max(1, d.width))
     .append("title")
     .text(
-      (d) =>
-        `${d.source.name} → ${d.target.name}\n${(
-          (d.value / total) *
-          100
-        ).toFixed(1)}% (${d.value.toLocaleString()})`
+      (d) => {
+         const den = originTotal; // Links siempre parten del total de origen
+         return `${d.source.name} → ${d.target.name}\n${((d.value / den) * 100).toFixed(1)}% (${d.value.toLocaleString()})`
+      }
     );
 
   // Labels con porcentajes
@@ -144,7 +144,11 @@ function _chart(d3,data,width,height,color_config,unique_nodes)
     .text((d) => d.name)
     .append("tspan")
     .attr("fill-opacity", 0.7)
-    .text((d) => ` ${((d.value / total) * 100).toFixed(1)}%`);
+    .text((d) => {
+        const isOrig = d.name.includes("(Orig)");
+        const den = isOrig ? originTotal : targetTotal;
+        return ` ${((d.value / den) * 100).toFixed(1)}%`;
+    });
 
   // Fuente
   svg
