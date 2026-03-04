@@ -234,10 +234,11 @@ function checkReadyToRun() {
     btnRun.disabled = !isReady;
 }
 
-// Data parser logic (Stack to Wide internally) forcing exactly Top 6 + OTROS
+// Data parser logic (Stack to Wide internally) forcing exactly Top 6 + OTROS + Blancos
 function pivotStackedToWide(rawData, idCol, popCol, partyNameCol, partyVotesCol) {
     // 1. Calculate global votes per party to determine Top 6
     const globalVotes = new Map();
+    const isBlancoNulo = (name) => /blanco|nulo|impugnado|recurrido/i.test(name);
     
     rawData.forEach(row => {
         const party = row[partyNameCol];
@@ -247,17 +248,29 @@ function pivotStackedToWide(rawData, idCol, popCol, partyNameCol, partyVotesCol)
         }
     });
     
-    // Sort parties by volume descending
-    const sortedParties = Array.from(globalVotes.entries()).sort((a, b) => b[1] - a[1]);
+    // Split into proper parties vs Blancos/Nulos
+    const properParties = [];
     
-    // Take Top 6, the rest goes to OTROS
-    const top6 = sortedParties.slice(0, 6).map(p => p[0]);
+    globalVotes.forEach((votes, party) => {
+        if (!isBlancoNulo(party)) {
+            properParties.push([party, votes]);
+        }
+    });
+    
+    // Sort proper parties by volume descending
+    properParties.sort((a, b) => b[1] - a[1]);
+    
+    // Take Top 6
+    const top6 = properParties.slice(0, 6).map(p => p[0]);
     
     const partyMapping = new Map();
     const OTROS_LABEL = "OTROS";
+    const REST_LABEL = "en blanco o ausentes";
     
-    sortedParties.forEach(([party, _votes]) => {
-        if (top6.includes(party)) {
+    globalVotes.forEach((votes, party) => {
+        if (isBlancoNulo(party)) {
+            partyMapping.set(party, REST_LABEL);
+        } else if (top6.includes(party)) {
             partyMapping.set(party, party);
         } else {
             partyMapping.set(party, OTROS_LABEL);
@@ -358,12 +371,15 @@ btnRun.onclick = async () => {
         
         // Filter and merge strictly on ID
         const mergedData = [];
-        const SRC_REST = "Ausentes / Blancos / Nulos";
-        const TGT_REST = "Ausentes / Blancos / Nulos";
+        const REST_LABEL = "en blanco o ausentes";
+        
+        // Remove REST_LABEL from src/tgt arrays so it isn't double-counted in the inner loop
+        srcParties = srcParties.filter(p => p !== REST_LABEL);
+        tgtParties = tgtParties.filter(p => p !== REST_LABEL);
         
         let totalSrcVotes = {};
         srcParties.forEach(p => totalSrcVotes[p] = 0);
-        totalSrcVotes[SRC_REST] = 0;
+        totalSrcVotes[REST_LABEL] = 0;
 
         originProcData.forEach(srcRow => {
             const id = String(srcRow[idColOrig]);
@@ -383,8 +399,13 @@ btnRun.onclick = async () => {
                         xPos += votes;
                         totalSrcVotes[p] += votes;
                     });
+                    
+                    const srcBlancoAgrupado = Number(srcRow[REST_LABEL]) || 0;
+                    
+                    // Math.max guarantees non-negative, but functionally (popSrc - xPos) perfectly represents 
+                    // ALL missing votes from the Top 6 + OTROS (which naturally includes Blancos, Nulos, and Ausentes implicitly)
                     const xRest = Math.max(0, popSrc - xPos);
-                    totalSrcVotes[SRC_REST] += xRest;
+                    totalSrcVotes[REST_LABEL] += xRest;
                     
                     let tPos = 0;
                     tgtParties.forEach((p) => {
@@ -511,8 +532,8 @@ btnRun.onclick = async () => {
         const matrixFlat = await result.toJs(); 
         const values = matrixFlat.values;
         
-        const fullSrcParties = [...srcParties, SRC_REST];
-        const fullTgtParties = [...tgtParties, TGT_REST];
+        const fullSrcParties = [...srcParties, REST_LABEL];
+        const fullTgtParties = [...tgtParties, REST_LABEL];
         
         const numRows = fullSrcParties.length;
         const numCols = fullTgtParties.length;
@@ -549,9 +570,9 @@ btnRun.onclick = async () => {
                 const prob = transferMatrix[r][c];
                 const estVotes = Math.round(srcTotal * prob);
                 
-                // Exclude the completely meaningless "Ausentes (Orig) -> Ausentes (Dest)" self-loop 
+                // Exclude the completely meaningless "Blancos/Ausentes (Orig) -> Blancos/Ausentes (Dest)" self-loop 
                 // to avoid crushing the scale of political flows in the Sankey visualization
-                if (fullSrcParties[r] === SRC_REST && fullTgtParties[c] === TGT_REST) {
+                if (fullSrcParties[r] === REST_LABEL && fullTgtParties[c] === REST_LABEL) {
                     continue;
                 }
                 
@@ -570,13 +591,13 @@ btnRun.onclick = async () => {
         webrStatus.className = 'status-badge ready';
         webrStatus.innerText = '✅ Inferencia Completada';
         
-        // Count valid active votes per election (excluding Ausentes itself) for D3 baseline
+        // Count valid active votes per election (excluding En blanco o ausentes) for D3 baseline
         let activeSrcVotes = 0;
         let activeTgtVotes = 0;
         srcParties.forEach(p => activeSrcVotes += totalSrcVotes[p]);
         tgtParties.forEach(p => {
              // We can estimate the total valid target votes that actually participated
-             // by summing all estimated flows that arrived at target parties (excluding TGT_REST)
+             // by summing all estimated flows that arrived at target parties (excluding REST_LABEL)
              graphData.forEach(link => {
                   if (link.target === p + " (Dest)") {
                       activeTgtVotes += link.value;
